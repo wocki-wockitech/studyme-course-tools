@@ -1,0 +1,44 @@
+name: 'StudyMe Action'
+description: 'Maintains StudyMe course repositories: auto-fill UUIDs, validate structure'
+author: 'wockitech'
+branding:
+  icon: 'book-open'
+  color: 'blue'
+
+inputs:
+  mode:
+    description: 'Operation mode: fix-ids | lint'
+    required: true
+  path:
+    description: 'Course root directory (relative to repo root)'
+    required: false
+    default: '.'
+
+outputs:
+  changed_files:
+    description: 'Newline-separated list of files modified by fix-ids'
+    value: ${{ steps.run.outputs.changed_files }}
+  errors:
+    description: 'JSON array of lint errors (lint mode only)'
+    value: ${{ steps.run.outputs.errors }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+        cache: false
+
+    - name: Build studyme-action
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        go build -o /tmp/studyme-action ./cmd/studyme-action
+
+    - name: Run studyme-action
+      id: run
+      shell: bash
+      run: |
+        /tmp/studyme-action "${{ inputs.mode }}" "${{ inputs.path }}"
