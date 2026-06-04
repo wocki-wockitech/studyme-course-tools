@@ -78,13 +78,13 @@ type Variant struct {
 	PassThreshold      float64        `yaml:"pass_threshold,omitempty"`
 	ChallengeSlug      string         `yaml:"challenge_slug,omitempty"`
 
-	// code_fill / code_output
+	// code_fill / code_fill
 	File        string `yaml:"file,omitempty"`  // filename of code file with ___ markers
 	FileContent string `yaml:"-"`               // loaded content (not from YAML, loaded by reader)
 	Slots       []Slot `yaml:"slots,omitempty"` // per-slot answers, hints, explanations
 }
 
-// Slot describes one fill-in slot (___) in a code_fill or code_output question.
+// Slot describes one fill-in slot (___) in a code_fill question.
 type Slot struct {
 	Answer      []string `yaml:"answer"`                // acceptable answers for this slot
 	Hints       []any    `yaml:"hints,omitempty"`       // []string or []{lang:text}

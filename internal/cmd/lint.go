@@ -572,6 +572,19 @@ func validateVariant(file, slug string, idx int, v course.Variant) []LintError {
 				Message: fmt.Sprintf("%s: %s needs challenge_slug", prefix, v.Type),
 			})
 		}
+	case "code_fill":
+		if v.File == "" && v.FileContent == "" {
+			errs = append(errs, LintError{
+				File: file, Code: "missing_file",
+				Message: fmt.Sprintf("%s: %s needs a code file (file: field)", prefix, v.Type),
+			})
+		}
+		if len(v.Slots) == 0 {
+			errs = append(errs, LintError{
+				File: file, Code: "missing_slots",
+				Message: fmt.Sprintf("%s: %s needs at least one slot", prefix, v.Type),
+			})
+		}
 	default:
 		errs = append(errs, LintError{
 			File: file, Code: "unknown_type",

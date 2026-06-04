@@ -133,7 +133,7 @@ func loadLesson(root, blockSlug, lessonSlug string) (*LessonRef, error) {
 			if err := yaml.Unmarshal(qfData, &qf); err != nil {
 				return nil, fmt.Errorf("parse %s: %w", qfPath, err)
 			}
-			// Load referenced code files for code_fill/code_output variants.
+			// Load referenced code files for code_fill variants.
 			for i := range qf.Variants {
 				if qf.Variants[i].File != "" {
 					codePath := filepath.Join(qDir, slug, qf.Variants[i].File)
