@@ -252,11 +252,26 @@ func validateQuestions(c *course.CourseRef) []LintError {
 							Message: fmt.Sprintf("question %q: multiple_choice needs at least 2 options", q.Slug),
 						})
 					}
-					if q.Correct == nil {
+					hasCorrect := false
+					for _, opt := range q.Options {
+						if opt.Correct {
+							hasCorrect = true
+							break
+						}
+					}
+					if !hasCorrect {
 						errs = append(errs, LintError{
 							File: l.Path, Code: "missing_correct",
-							Message: fmt.Sprintf("question %q: multiple_choice needs `correct` field", q.Slug),
+							Message: fmt.Sprintf("question %q: multiple_choice needs at least one option with correct: true", q.Slug),
 						})
+					}
+					for i, opt := range q.Options {
+						if opt.Text == "" {
+							errs = append(errs, LintError{
+								File: l.Path, Code: "empty_option_text",
+								Message: fmt.Sprintf("question %q: option %d has empty text", q.Slug, i),
+							})
+						}
 					}
 				case "true_false":
 					if _, ok := q.Correct.(bool); !ok {

@@ -145,9 +145,12 @@ func loadLesson(root, blockSlug, lessonSlug string) (*LessonRef, error) {
 var calloutRefRe = regexp.MustCompile(`(?m)^>\s*\[!([\w-]+)\][+-]?\s*(.*)$`)
 
 // extractCalloutRefs returns slugs referenced from callouts of the given type.
+// Lines inside fenced code blocks (``` or ~~~) are skipped.
 func extractCalloutRefs(body []byte, calloutType string) []string {
+	cleaned := stripFencedCodeBlocks(body)
+
 	var refs []string
-	matches := calloutRefRe.FindAllStringSubmatch(string(body), -1)
+	matches := calloutRefRe.FindAllStringSubmatch(string(cleaned), -1)
 	for _, m := range matches {
 		if !strings.EqualFold(m[1], calloutType) {
 			continue
@@ -159,4 +162,29 @@ func extractCalloutRefs(body []byte, calloutType string) []string {
 		refs = append(refs, slug)
 	}
 	return refs
+}
+
+// stripFencedCodeBlocks removes content between ``` or ~~~ fence markers.
+func stripFencedCodeBlocks(body []byte) []byte {
+	lines := strings.Split(string(body), "\n")
+	var out []string
+	inFence := false
+	var fenceMarker string
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !inFence {
+			if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+				inFence = true
+				fenceMarker = trimmed[:3]
+				continue
+			}
+			out = append(out, line)
+		} else {
+			if strings.HasPrefix(trimmed, fenceMarker) {
+				inFence = false
+			}
+		}
+	}
+	return []byte(strings.Join(out, "\n"))
 }

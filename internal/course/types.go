@@ -53,6 +53,13 @@ type QuestionsFile struct {
 	Questions []Question `yaml:"questions"`
 }
 
+// Option is one rich multiple-choice answer option.
+type Option struct {
+	Text     string `yaml:"text"`
+	Correct  bool   `yaml:"correct,omitempty"`
+	Feedback string `yaml:"feedback,omitempty"`
+}
+
 // Question represents one entry in questions.yaml.
 // Type-specific fields are kept as raw maps because they vary per type.
 type Question struct {
@@ -64,14 +71,32 @@ type Question struct {
 	Tags            []string `yaml:"tags,omitempty"`
 	ReferenceAnswer string   `yaml:"reference_answer,omitempty"`
 	// type=multiple_choice
-	Options []string `yaml:"options,omitempty"`
-	Correct any      `yaml:"correct,omitempty"`
+	Options []Option `yaml:"options,omitempty"`
+	// type=true_false
+	Correct any `yaml:"correct,omitempty"`
 	// type=free_text
 	EvaluationCriteria map[string]any `yaml:"evaluation_criteria,omitempty"`
 	MaxScore           int            `yaml:"max_score,omitempty"`
 	PassThreshold      float64        `yaml:"pass_threshold,omitempty"`
 	// type=coding | git_interactive
 	ChallengeSlug string `yaml:"challenge_slug,omitempty"`
+}
+
+// CorrectIndices returns 0-based indices of correct options.
+func (q Question) CorrectIndices() []int {
+	var out []int
+	for i, o := range q.Options {
+		if o.Correct {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+// AllowMultiple reports whether this multiple_choice question has more
+// than one correct answer.
+func (q Question) AllowMultiple() bool {
+	return len(q.CorrectIndices()) > 1
 }
 
 // Challenge is the manifest from challenge.yaml.
