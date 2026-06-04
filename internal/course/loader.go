@@ -85,11 +85,12 @@ func loadLesson(root, blockSlug, lessonSlug string) (*LessonRef, error) {
 	}
 
 	lref := &LessonRef{
-		BlockSlug:   blockSlug,
-		LessonSlug:  lessonSlug,
-		Path:        lessonPath,
-		Frontmatter: fm,
-		Challenges:  map[string]Challenge{},
+		BlockSlug:     blockSlug,
+		LessonSlug:    lessonSlug,
+		Path:          lessonPath,
+		Frontmatter:   fm,
+		QuestionFiles: map[string]QuestionFile{},
+		Challenges:    map[string]Challenge{},
 	}
 
 	// Extract widget references from markdown body.
@@ -106,6 +107,33 @@ func loadLesson(root, blockSlug, lessonSlug string) (*LessonRef, error) {
 		lref.Questions = qf.Questions
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read questions.yaml: %w", err)
+	}
+
+	// Load questions/ directory if present (new format: one file per question).
+	qDir := filepath.Join(dir, "questions")
+	qEntries, qErr := os.ReadDir(qDir)
+	if qErr != nil && !os.IsNotExist(qErr) {
+		return nil, fmt.Errorf("read questions/: %w", qErr)
+	}
+	for _, qe := range qEntries {
+		if qe.IsDir() {
+			continue
+		}
+		name := qe.Name()
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			continue
+		}
+		slug := strings.TrimSuffix(strings.TrimSuffix(name, ".yaml"), ".yml")
+		qfPath := filepath.Join(qDir, name)
+		qfData, readErr := os.ReadFile(qfPath)
+		if readErr != nil {
+			return nil, fmt.Errorf("read %s: %w", qfPath, readErr)
+		}
+		var qf QuestionFile
+		if err := yaml.Unmarshal(qfData, &qf); err != nil {
+			return nil, fmt.Errorf("parse %s: %w", qfPath, err)
+		}
+		lref.QuestionFiles[slug] = qf
 	}
 
 	// Load challenges/<slug>/challenge.yaml for each challenge folder.

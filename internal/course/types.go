@@ -53,6 +53,51 @@ type QuestionsFile struct {
 	Questions []Question `yaml:"questions"`
 }
 
+// QuestionFile is the structure of a single question file in questions/<slug>.yaml.
+// New format with variants support.
+type QuestionFile struct {
+	ID         string    `yaml:"id"`
+	Difficulty int       `yaml:"difficulty"`
+	Tags       []string  `yaml:"tags,omitempty"`
+	Variants   []Variant `yaml:"variants"`
+}
+
+// Variant is one formulation of a question within a QuestionFile.
+type Variant struct {
+	Type               string         `yaml:"type"`
+	Text               any            `yaml:"text"`                          // string | map[string]string
+	Options            []RichOption   `yaml:"options,omitempty"`             // multiple_choice
+	Correct            any            `yaml:"correct,omitempty"`             // true_false
+	Items              []any          `yaml:"items,omitempty"`               // ordering
+	Pairs              []Pair         `yaml:"pairs,omitempty"`               // matching
+	Categories         []Category     `yaml:"categories,omitempty"`          // categorize
+	Distractors        []any          `yaml:"distractors,omitempty"`         // matching/categorize
+	ReferenceAnswer    any            `yaml:"reference_answer,omitempty"`    // string | map[string]string
+	EvaluationCriteria map[string]any `yaml:"evaluation_criteria,omitempty"` // free_text
+	MaxScore           int            `yaml:"max_score,omitempty"`
+	PassThreshold      float64        `yaml:"pass_threshold,omitempty"`
+	ChallengeSlug      string         `yaml:"challenge_slug,omitempty"`
+}
+
+// RichOption is a multiple-choice option supporting i18n.
+type RichOption struct {
+	Text     any  `yaml:"text"` // string | map[string]string
+	Correct  bool `yaml:"correct,omitempty"`
+	Feedback any  `yaml:"feedback,omitempty"` // string | map[string]string
+}
+
+// Pair is a left-right matching pair.
+type Pair struct {
+	Left  any `yaml:"left"`  // string | map[string]string
+	Right any `yaml:"right"` // string | map[string]string
+}
+
+// Category is one group in a categorize question.
+type Category struct {
+	Name  any   `yaml:"name"`  // string | map[string]string
+	Items []any `yaml:"items"` // []string or []{lang:text}
+}
+
 // Option is one rich multiple-choice answer option.
 type Option struct {
 	Text     string `yaml:"text"`
@@ -116,12 +161,13 @@ type Challenge struct {
 // LessonRef is a discovered lesson on disk with its parsed frontmatter
 // and resolved references.
 type LessonRef struct {
-	BlockSlug   string
-	LessonSlug  string
-	Path        string // path to lesson.md
-	Frontmatter LessonFrontmatter
-	Questions   []Question           // from questions.yaml (if present)
-	Challenges  map[string]Challenge // by challenge slug
+	BlockSlug     string
+	LessonSlug    string
+	Path          string // path to lesson.md
+	Frontmatter   LessonFrontmatter
+	Questions     []Question              // from questions.yaml (if present)
+	QuestionFiles map[string]QuestionFile // from questions/<slug>.yaml (new format)
+	Challenges    map[string]Challenge    // by challenge slug
 	// QuizRefs lists slugs referenced from `> [!quiz] slug` callouts in lesson.md.
 	QuizRefs []string
 	// ChallengeRefs lists slugs referenced from `> [!challenge] slug`.

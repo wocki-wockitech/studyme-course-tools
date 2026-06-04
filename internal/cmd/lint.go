@@ -126,6 +126,9 @@ func validateUniqueIDs(c *course.CourseRef) []LintError {
 			for _, q := range l.Questions {
 				track(q.ID, l.Path+":questions["+q.Slug+"]")
 			}
+			for slug, qf := range l.QuestionFiles {
+				track(qf.ID, l.Path+":questions/"+slug)
+			}
 			for chSlug, ch := range l.Challenges {
 				track(ch.ID, l.Path+":challenges/"+chSlug)
 			}
@@ -152,6 +155,9 @@ func validateReferences(c *course.CourseRef) []LintError {
 			questionSlugs := map[string]bool{}
 			for _, q := range l.Questions {
 				questionSlugs[q.Slug] = true
+			}
+			for slug := range l.QuestionFiles {
+				questionSlugs[slug] = true
 			}
 			challengeSlugs := map[string]bool{}
 			for chSlug := range l.Challenges {
@@ -308,6 +314,54 @@ func validateQuestions(c *course.CourseRef) []LintError {
 					})
 				}
 			}
+
+			// Validate new format: questions/ directory files.
+			for slug, qf := range l.QuestionFiles {
+				file := l.Path + ":questions/" + slug
+				if !isValidSlug(slug) {
+					errs = append(errs, LintError{
+						File: file, Code: "invalid_slug",
+						Message: fmt.Sprintf("question file name %q must match [a-z0-9-]+", slug),
+					})
+				}
+				if slugs[slug] {
+					errs = append(errs, LintError{
+						File: file, Code: "duplicate_slug",
+						Message: fmt.Sprintf("question slug %q conflicts with flat questions.yaml", slug),
+					})
+				}
+				slugs[slug] = true
+
+				if qf.ID == "" {
+					errs = append(errs, LintError{
+						File: file, Code: "missing_id",
+						Message: fmt.Sprintf("question file %q has empty id", slug),
+					})
+				} else if !isUUID(qf.ID) {
+					errs = append(errs, LintError{
+						File: file, Code: "invalid_id",
+						Message: fmt.Sprintf("question file id %q is not a valid UUID", qf.ID),
+					})
+				}
+
+				if qf.Difficulty != 0 && (qf.Difficulty < 1 || qf.Difficulty > 5) {
+					errs = append(errs, LintError{
+						File: file, Code: "invalid_difficulty",
+						Message: fmt.Sprintf("question file %q: difficulty must be 1-5, got %d", slug, qf.Difficulty),
+					})
+				}
+
+				if len(qf.Variants) == 0 {
+					errs = append(errs, LintError{
+						File: file, Code: "no_variants",
+						Message: fmt.Sprintf("question file %q has no variants", slug),
+					})
+				}
+
+				for vi, v := range qf.Variants {
+					errs = append(errs, validateVariant(file, slug, vi, v)...)
+				}
+			}
 		}
 	}
 	return errs
@@ -400,6 +454,156 @@ func validateChallenges(c *course.CourseRef) []LintError {
 func isUUID(s string) bool {
 	_, err := uuid.Parse(s)
 	return err == nil
+}
+
+// validateVariant checks one variant in a question file.
+func validateVariant(file, slug string, idx int, v course.Variant) []LintError {
+	var errs []LintError
+	prefix := fmt.Sprintf("question %q variant[%d]", slug, idx)
+
+	if hasLocalizedText(v.Text) == "" {
+		errs = append(errs, LintError{
+			File: file, Code: "missing_text",
+			Message: fmt.Sprintf("%s: text is empty", prefix),
+		})
+	}
+
+	switch v.Type {
+	case "":
+		errs = append(errs, LintError{
+			File: file, Code: "missing_type",
+			Message: fmt.Sprintf("%s: type is empty", prefix),
+		})
+	case "multiple_choice":
+		if len(v.Options) < 2 {
+			errs = append(errs, LintError{
+				File: file, Code: "invalid_options",
+				Message: fmt.Sprintf("%s: multiple_choice needs at least 2 options", prefix),
+			})
+		}
+		hasCorrect := false
+		for _, opt := range v.Options {
+			if opt.Correct {
+				hasCorrect = true
+				break
+			}
+		}
+		if !hasCorrect {
+			errs = append(errs, LintError{
+				File: file, Code: "missing_correct",
+				Message: fmt.Sprintf("%s: multiple_choice needs at least one option with correct: true", prefix),
+			})
+		}
+		for i, opt := range v.Options {
+			if hasLocalizedText(opt.Text) == "" {
+				errs = append(errs, LintError{
+					File: file, Code: "empty_option_text",
+					Message: fmt.Sprintf("%s: option %d has empty text", prefix, i),
+				})
+			}
+		}
+	case "true_false":
+		if v.Correct == nil {
+			errs = append(errs, LintError{
+				File: file, Code: "missing_correct",
+				Message: fmt.Sprintf("%s: true_false needs `correct` field", prefix),
+			})
+		}
+	case "ordering":
+		if len(v.Items) < 2 {
+			errs = append(errs, LintError{
+				File: file, Code: "invalid_items",
+				Message: fmt.Sprintf("%s: ordering needs at least 2 items", prefix),
+			})
+		}
+	case "matching":
+		if len(v.Pairs) < 2 {
+			errs = append(errs, LintError{
+				File: file, Code: "invalid_pairs",
+				Message: fmt.Sprintf("%s: matching needs at least 2 pairs", prefix),
+			})
+		}
+		for i, p := range v.Pairs {
+			if hasLocalizedText(p.Left) == "" {
+				errs = append(errs, LintError{
+					File: file, Code: "empty_pair_text",
+					Message: fmt.Sprintf("%s: pair %d has empty left", prefix, i),
+				})
+			}
+			if hasLocalizedText(p.Right) == "" {
+				errs = append(errs, LintError{
+					File: file, Code: "empty_pair_text",
+					Message: fmt.Sprintf("%s: pair %d has empty right", prefix, i),
+				})
+			}
+		}
+	case "categorize":
+		if len(v.Categories) < 2 {
+			errs = append(errs, LintError{
+				File: file, Code: "invalid_categories",
+				Message: fmt.Sprintf("%s: categorize needs at least 2 categories", prefix),
+			})
+		}
+		for i, cat := range v.Categories {
+			if hasLocalizedText(cat.Name) == "" {
+				errs = append(errs, LintError{
+					File: file, Code: "empty_category_name",
+					Message: fmt.Sprintf("%s: category %d has empty name", prefix, i),
+				})
+			}
+			if len(cat.Items) == 0 {
+				errs = append(errs, LintError{
+					File: file, Code: "empty_category_items",
+					Message: fmt.Sprintf("%s: category %d has no items", prefix, i),
+				})
+			}
+		}
+	case "free_text":
+		if hasLocalizedText(v.ReferenceAnswer) == "" {
+			errs = append(errs, LintError{
+				File: file, Code: "missing_reference",
+				Message: fmt.Sprintf("%s: free_text needs reference_answer", prefix),
+			})
+		}
+	case "coding", "git_interactive":
+		if v.ChallengeSlug == "" {
+			errs = append(errs, LintError{
+				File: file, Code: "missing_challenge_ref",
+				Message: fmt.Sprintf("%s: %s needs challenge_slug", prefix, v.Type),
+			})
+		}
+	default:
+		errs = append(errs, LintError{
+			File: file, Code: "unknown_type",
+			Message: fmt.Sprintf("%s: unknown type %q", prefix, v.Type),
+		})
+	}
+	return errs
+}
+
+// hasLocalizedText returns a non-empty string if the value contains text.
+// Handles plain string and map[string]any / map[string]string (i18n).
+func hasLocalizedText(val any) string {
+	switch v := val.(type) {
+	case string:
+		return v
+	case map[string]any:
+		for _, s := range v {
+			if str, ok := s.(string); ok && str != "" {
+				return str
+			}
+		}
+		return ""
+	case map[string]string:
+		for _, s := range v {
+			if s != "" {
+				return s
+			}
+		}
+		return ""
+	default:
+		return ""
+	}
 }
 
 func isValidSlug(s string) bool {
