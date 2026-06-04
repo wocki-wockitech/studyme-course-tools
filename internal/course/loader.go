@@ -116,10 +116,39 @@ func loadLesson(root, blockSlug, lessonSlug string) (*LessonRef, error) {
 		return nil, fmt.Errorf("read questions/: %w", qErr)
 	}
 	for _, qe := range qEntries {
+		name := qe.Name()
+
 		if qe.IsDir() {
+			// Subfolder format: questions/<slug>/question.yaml + code files
+			slug := name
+			qfPath := filepath.Join(qDir, slug, "question.yaml")
+			qfData, readErr := os.ReadFile(qfPath)
+			if readErr != nil {
+				if os.IsNotExist(readErr) {
+					continue // folder without question.yaml — skip
+				}
+				return nil, fmt.Errorf("read %s: %w", qfPath, readErr)
+			}
+			var qf QuestionFile
+			if err := yaml.Unmarshal(qfData, &qf); err != nil {
+				return nil, fmt.Errorf("parse %s: %w", qfPath, err)
+			}
+			// Load referenced code files for code_fill/code_output variants.
+			for i := range qf.Variants {
+				if qf.Variants[i].File != "" {
+					codePath := filepath.Join(qDir, slug, qf.Variants[i].File)
+					codeData, codeErr := os.ReadFile(codePath)
+					if codeErr != nil {
+						return nil, fmt.Errorf("read code file %s: %w", codePath, codeErr)
+					}
+					qf.Variants[i].FileContent = string(codeData)
+				}
+			}
+			lref.QuestionFiles[slug] = qf
 			continue
 		}
-		name := qe.Name()
+
+		// Flat file format: questions/<slug>.yaml
 		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
 			continue
 		}
