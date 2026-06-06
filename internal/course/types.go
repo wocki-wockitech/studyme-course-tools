@@ -8,8 +8,8 @@ import "time"
 type Course struct {
 	ID          string   `yaml:"id"`
 	Slug        string   `yaml:"slug"`
-	Title       string   `yaml:"title"`
-	Description string   `yaml:"description"`
+	Title       any      `yaml:"title"`       // string | map[string]string (i18n)
+	Description any      `yaml:"description"` // string | map[string]string (i18n)
 	Language    string   `yaml:"language"`
 	Difficulty  string   `yaml:"difficulty"`
 	Tags        []string `yaml:"tags"`
@@ -17,6 +17,9 @@ type Course struct {
 	License     string   `yaml:"license"`
 	Authors     []Author `yaml:"authors"`
 	Blocks      []string `yaml:"blocks"`
+
+	DefaultLanguage string   `yaml:"default_language"`
+	Languages       []string `yaml:"languages"`
 }
 
 type Author struct {
@@ -27,8 +30,8 @@ type Author struct {
 // Block is the manifest from block.yaml.
 type Block struct {
 	ID          string    `yaml:"id"`
-	Title       string    `yaml:"title"`
-	Description string    `yaml:"description"`
+	Title       any       `yaml:"title"`       // string | map[string]string (i18n)
+	Description any       `yaml:"description"` // string | map[string]string (i18n)
 	Lessons     []string  `yaml:"lessons"`
 	Test        BlockTest `yaml:"test"`
 }

@@ -68,7 +68,7 @@ func validateCourse(c *course.CourseRef) []LintError {
 		errs = append(errs, LintError{c.Path, "invalid_slug",
 			fmt.Sprintf("course.yaml: slug %q must match [a-z0-9-]+", c.Course.Slug)})
 	}
-	if c.Course.Title == "" {
+	if isEmptyTitle(c.Course.Title) {
 		errs = append(errs, LintError{c.Path, "missing_title", "course.yaml: title is empty"})
 	}
 	if len(c.Course.Blocks) == 0 {
@@ -83,7 +83,7 @@ func validateCourse(c *course.CourseRef) []LintError {
 			errs = append(errs, LintError{b.Path, "invalid_id",
 				fmt.Sprintf("block.yaml: id %q is not a valid UUID", b.Block.ID)})
 		}
-		if b.Block.Title == "" {
+		if isEmptyTitle(b.Block.Title) {
 			errs = append(errs, LintError{b.Path, "missing_title", "block.yaml: title is empty"})
 		}
 		if len(b.Block.Lessons) == 0 {
@@ -617,6 +617,21 @@ func hasLocalizedText(val any) string {
 	default:
 		return ""
 	}
+}
+
+func isEmptyTitle(v any) bool {
+	if v == nil {
+		return true
+	}
+	switch t := v.(type) {
+	case string:
+		return t == ""
+	case map[string]any:
+		return len(t) == 0
+	case map[string]string:
+		return len(t) == 0
+	}
+	return false
 }
 
 func isValidSlug(s string) bool {
