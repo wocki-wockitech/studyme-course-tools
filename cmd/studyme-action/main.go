@@ -16,7 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/wockitech/studyme-action/internal/cmd"
+	"github.com/wocki-wockitech/studyme-course-tools/internal/cmd"
 )
 
 func main() {

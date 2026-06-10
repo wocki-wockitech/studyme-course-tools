@@ -1,4 +1,4 @@
-module github.com/wockitech/studyme-action
+module github.com/wocki-wockitech/studyme-course-tools
 
 go 1.26
 

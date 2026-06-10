@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/wockitech/studyme-action/internal/course"
-	"github.com/wockitech/studyme-action/pkg/coursefmt"
+	"github.com/wocki-wockitech/studyme-course-tools/internal/course"
+	"github.com/wocki-wockitech/studyme-course-tools/pkg/coursefmt"
 )
 
 // FixIDs walks the course tree at root and fills missing `id:` fields

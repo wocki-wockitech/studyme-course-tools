@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/wockitech/studyme-action/pkg/coursefmt"
+	"github.com/wocki-wockitech/studyme-course-tools/pkg/coursefmt"
 )
 
 // LintError is one validation problem reported by Lint.
