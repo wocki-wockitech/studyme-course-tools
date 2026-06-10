@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/wockitech/studyme-action/internal/course"
+	"github.com/wockitech/studyme-action/pkg/coursefmt"
 )
 
 // LintError is one validation problem reported by Lint.
@@ -28,7 +28,7 @@ func (e LintError) String() string {
 func Lint(root string) ([]LintError, error) {
 	var errs []LintError
 
-	c, err := course.Load(root)
+	c, err := coursefmt.Load(root)
 	if err != nil {
 		return []LintError{{
 			File:    root,
@@ -52,7 +52,7 @@ func Lint(root string) ([]LintError, error) {
 	return errs, nil
 }
 
-func validateCourse(c *course.CourseRef) []LintError {
+func validateCourse(c *coursefmt.CourseRef) []LintError {
 	var errs []LintError
 
 	if c.Course.ID == "" {
@@ -68,7 +68,7 @@ func validateCourse(c *course.CourseRef) []LintError {
 		errs = append(errs, LintError{c.Path, "invalid_slug",
 			fmt.Sprintf("course.yaml: slug %q must match [a-z0-9-]+", c.Course.Slug)})
 	}
-	if isEmptyTitle(c.Course.Title) {
+	if c.Course.Title.Resolve("", "") == "" {
 		errs = append(errs, LintError{c.Path, "missing_title", "course.yaml: title is empty"})
 	}
 	if len(c.Course.Blocks) == 0 {
@@ -83,7 +83,7 @@ func validateCourse(c *course.CourseRef) []LintError {
 			errs = append(errs, LintError{b.Path, "invalid_id",
 				fmt.Sprintf("block.yaml: id %q is not a valid UUID", b.Block.ID)})
 		}
-		if isEmptyTitle(b.Block.Title) {
+		if b.Block.Title.Resolve("", "") == "" {
 			errs = append(errs, LintError{b.Path, "missing_title", "block.yaml: title is empty"})
 		}
 		if len(b.Block.Lessons) == 0 {
@@ -107,7 +107,7 @@ func validateCourse(c *course.CourseRef) []LintError {
 	return errs
 }
 
-func validateUniqueIDs(c *course.CourseRef) []LintError {
+func validateUniqueIDs(c *coursefmt.CourseRef) []LintError {
 	var errs []LintError
 	seen := map[string][]string{} // id → file paths
 
@@ -126,8 +126,8 @@ func validateUniqueIDs(c *course.CourseRef) []LintError {
 			for _, q := range l.Questions {
 				track(q.ID, l.Path+":questions["+q.Slug+"]")
 			}
-			for slug, qf := range l.QuestionFiles {
-				track(qf.ID, l.Path+":questions/"+slug)
+			for slug, cf := range l.CardFiles {
+				track(cf.ID, l.Path+":cards/"+slug)
 			}
 			for chSlug, ch := range l.Challenges {
 				track(ch.ID, l.Path+":challenges/"+chSlug)
@@ -147,7 +147,7 @@ func validateUniqueIDs(c *course.CourseRef) []LintError {
 	return errs
 }
 
-func validateReferences(c *course.CourseRef) []LintError {
+func validateReferences(c *coursefmt.CourseRef) []LintError {
 	var errs []LintError
 
 	for _, b := range c.Blocks {
@@ -156,7 +156,7 @@ func validateReferences(c *course.CourseRef) []LintError {
 			for _, q := range l.Questions {
 				questionSlugs[q.Slug] = true
 			}
-			for slug := range l.QuestionFiles {
+			for slug := range l.CardFiles {
 				questionSlugs[slug] = true
 			}
 			challengeSlugs := map[string]bool{}
@@ -164,12 +164,12 @@ func validateReferences(c *course.CourseRef) []LintError {
 				challengeSlugs[chSlug] = true
 			}
 
-			// `> [!quiz] slug` — slug must exist in questions.yaml
-			for _, ref := range l.QuizRefs {
+			// `> [!card] slug` — slug must exist in cards/
+			for _, ref := range l.CardRefs {
 				if !questionSlugs[ref] {
 					errs = append(errs, LintError{
-						File: l.Path, Code: "unknown_quiz_ref",
-						Message: fmt.Sprintf("`> [!quiz] %s` references unknown question slug", ref),
+						File: l.Path, Code: "unknown_card_ref",
+						Message: fmt.Sprintf("`> [!card] %s` references unknown card slug", ref),
 					})
 				}
 			}
@@ -201,7 +201,7 @@ func validateReferences(c *course.CourseRef) []LintError {
 	return errs
 }
 
-func validateQuestions(c *course.CourseRef) []LintError {
+func validateQuestions(c *coursefmt.CourseRef) []LintError {
 	var errs []LintError
 
 	for _, b := range c.Blocks {
@@ -315,51 +315,51 @@ func validateQuestions(c *course.CourseRef) []LintError {
 				}
 			}
 
-			// Validate new format: questions/ directory files.
-			for slug, qf := range l.QuestionFiles {
-				file := l.Path + ":questions/" + slug
+			// Validate new format: cards/ directory files.
+			for slug, cf := range l.CardFiles {
+				file := l.Path + ":cards/" + slug
 				if !isValidSlug(slug) {
 					errs = append(errs, LintError{
 						File: file, Code: "invalid_slug",
-						Message: fmt.Sprintf("question file name %q must match [a-z0-9-]+", slug),
+						Message: fmt.Sprintf("card file name %q must match [a-z0-9-]+", slug),
 					})
 				}
 				if slugs[slug] {
 					errs = append(errs, LintError{
 						File: file, Code: "duplicate_slug",
-						Message: fmt.Sprintf("question slug %q conflicts with flat questions.yaml", slug),
+						Message: fmt.Sprintf("card slug %q conflicts with flat questions.yaml", slug),
 					})
 				}
 				slugs[slug] = true
 
-				if qf.ID == "" {
+				if cf.ID == "" {
 					errs = append(errs, LintError{
 						File: file, Code: "missing_id",
-						Message: fmt.Sprintf("question file %q has empty id", slug),
+						Message: fmt.Sprintf("card file %q has empty id", slug),
 					})
-				} else if !isUUID(qf.ID) {
+				} else if !isUUID(cf.ID) {
 					errs = append(errs, LintError{
 						File: file, Code: "invalid_id",
-						Message: fmt.Sprintf("question file id %q is not a valid UUID", qf.ID),
+						Message: fmt.Sprintf("card file id %q is not a valid UUID", cf.ID),
 					})
 				}
 
-				if qf.Difficulty != 0 && (qf.Difficulty < 1 || qf.Difficulty > 5) {
+				if cf.Difficulty != 0 && (cf.Difficulty < 1 || cf.Difficulty > 5) {
 					errs = append(errs, LintError{
 						File: file, Code: "invalid_difficulty",
-						Message: fmt.Sprintf("question file %q: difficulty must be 1-5, got %d", slug, qf.Difficulty),
+						Message: fmt.Sprintf("card file %q: difficulty must be 1-5, got %d", slug, cf.Difficulty),
 					})
 				}
 
-				if len(qf.Variants) == 0 {
+				if len(cf.Questions) == 0 {
 					errs = append(errs, LintError{
-						File: file, Code: "no_variants",
-						Message: fmt.Sprintf("question file %q has no variants", slug),
+						File: file, Code: "no_questions",
+						Message: fmt.Sprintf("card file %q has no questions", slug),
 					})
 				}
 
-				for vi, v := range qf.Variants {
-					errs = append(errs, validateVariant(file, slug, vi, v)...)
+				for qi, q := range cf.Questions {
+					errs = append(errs, validateCardQuestion(file, slug, qi, q)...)
 				}
 			}
 		}
@@ -367,7 +367,7 @@ func validateQuestions(c *course.CourseRef) []LintError {
 	return errs
 }
 
-func validateChallenges(c *course.CourseRef) []LintError {
+func validateChallenges(c *coursefmt.CourseRef) []LintError {
 	var errs []LintError
 
 	for _, b := range c.Blocks {
@@ -456,10 +456,10 @@ func isUUID(s string) bool {
 	return err == nil
 }
 
-// validateVariant checks one variant in a question file.
-func validateVariant(file, slug string, idx int, v course.Variant) []LintError {
+// validateCardQuestion checks one question in a card file.
+func validateCardQuestion(file, slug string, idx int, v coursefmt.CardQuestion) []LintError {
 	var errs []LintError
-	prefix := fmt.Sprintf("question %q variant[%d]", slug, idx)
+	prefix := fmt.Sprintf("card %q question[%d]", slug, idx)
 
 	if hasLocalizedText(v.Text) == "" {
 		errs = append(errs, LintError{
@@ -617,21 +617,6 @@ func hasLocalizedText(val any) string {
 	default:
 		return ""
 	}
-}
-
-func isEmptyTitle(v any) bool {
-	if v == nil {
-		return true
-	}
-	switch t := v.(type) {
-	case string:
-		return t == ""
-	case map[string]any:
-		return len(t) == 0
-	case map[string]string:
-		return len(t) == 0
-	}
-	return false
 }
 
 func isValidSlug(s string) bool {

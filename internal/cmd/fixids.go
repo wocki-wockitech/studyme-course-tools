@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/wockitech/studyme-action/internal/course"
+	"github.com/wockitech/studyme-action/pkg/coursefmt"
 )
 
 // FixIDs walks the course tree at root and fills missing `id:` fields
@@ -61,7 +62,7 @@ func discoverContentFiles(root string) ([]string, error) {
 		}
 
 		switch name {
-		case "course.yaml", "block.yaml", "challenge.yaml", "questions.yaml":
+		case "course.yaml", "block.yaml", "challenge.yaml", "questions.yaml", "question.yaml", "card.yaml":
 			out = append(out, path)
 		case "lesson.md":
 			out = append(out, path)
@@ -100,7 +101,7 @@ func fixOne(path string) (bool, error) {
 	}
 
 	switch name {
-	case "course.yaml", "block.yaml", "challenge.yaml":
+	case "course.yaml", "block.yaml", "challenge.yaml", "question.yaml", "card.yaml":
 		out, changed, _ := course.SetTopLevelIDIfMissing(data)
 		if !changed {
 			return false, nil
@@ -130,14 +131,14 @@ func fixOne(path string) (bool, error) {
 // fixLessonFrontmatter splits the markdown into frontmatter+body, fills
 // the id, and rejoins. Preserves body byte-for-byte.
 func fixLessonFrontmatter(data []byte) ([]byte, bool, error) {
-	yamlPart, body, err := course.SplitFrontmatter(data)
+	yamlPart, body, err := coursefmt.SplitFrontmatter(data)
 	if err != nil {
 		// No frontmatter — synthesize a minimal one with just the id.
 		// We do this so a freshly-created lesson.md without frontmatter
 		// becomes valid after one PR.
 		var buf bytes.Buffer
 		fixed, _, _ := course.SetTopLevelIDIfMissing([]byte(""))
-		if err := course.JoinFrontmatter(&buf, fixed, data); err != nil {
+		if err := coursefmt.JoinFrontmatter(&buf, fixed, data); err != nil {
 			return nil, false, err
 		}
 		return buf.Bytes(), true, nil
@@ -149,7 +150,7 @@ func fixLessonFrontmatter(data []byte) ([]byte, bool, error) {
 	}
 
 	var buf bytes.Buffer
-	if err := course.JoinFrontmatter(&buf, fixed, body); err != nil {
+	if err := coursefmt.JoinFrontmatter(&buf, fixed, body); err != nil {
 		return nil, false, err
 	}
 	return buf.Bytes(), true, nil
