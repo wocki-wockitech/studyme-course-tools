@@ -1,0 +1,48 @@
+# При создании релиза studyme-course-tools —
+# обновляет pinned-версию action в studyme-course-template.
+#
+# Поток: release в tools → коммит в template → курсы получат при sync.
+
+name: Update course template
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-template:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout course template
+        uses: actions/checkout@v4
+        with:
+          repository: wocki-wockitech/studyme-course-template
+          token: ${{ secrets.TEMPLATE_UPDATE_TOKEN }}
+          ref: main
+
+      - name: Pin new tools version in workflows
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          echo "📌 Updating studyme-course-tools to ${VERSION}"
+
+          find .github/workflows -name '*.yml' -exec \
+            sed -i "s|wocki-wockitech/studyme-course-tools@[^ ]*|wocki-wockitech/studyme-course-tools@${VERSION}|g" {} +
+
+          # Показываем что изменилось
+          git diff
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          VERSION="${{ github.event.release.tag_name }}"
+
+          if git diff --quiet; then
+            echo "✅ Версия уже актуальна"
+            exit 0
+          fi
+
+          git add .
+          git commit -m "chore: bump studyme-course-tools to ${VERSION}"
+          git push
