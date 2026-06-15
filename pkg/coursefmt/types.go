@@ -304,6 +304,23 @@ func DefaultLangText(val any, defaultLang string) string {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// defs/ directory format (one file per glossary definition)
+// ─────────────────────────────────────────────────────────────────────
+
+// DefinitionFile is the structure of a single definition in defs/<slug>.yaml.
+// It supports LocalizedText for term, definition, and example fields, allowing
+// both plain strings (single-language) and {lang: text} maps (multi-language).
+type DefinitionFile struct {
+	ID         string        `yaml:"id"`
+	Term       LocalizedText `yaml:"term"`
+	Aliases    []string      `yaml:"aliases"`
+	Tags       []string      `yaml:"tags,omitempty"`
+	Definition LocalizedText `yaml:"definition"`
+	Example    LocalizedText `yaml:"example"`
+	Related    []string      `yaml:"related,omitempty"`
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Legacy flat format (deprecated — kept for backward compat in CI)
 // ─────────────────────────────────────────────────────────────────────
 
@@ -364,8 +381,9 @@ type LessonRef struct {
 	LessonSlug  string
 	Path        string // path to lesson.md (default language file)
 	Frontmatter LessonFrontmatter
-	CardFiles   map[string]CardFile  // from cards/<slug>.yaml (keyed by slug)
-	Challenges  map[string]Challenge // by challenge slug
+	CardFiles   map[string]CardFile       // from cards/<slug>.yaml (keyed by slug)
+	Challenges  map[string]Challenge      // by challenge slug
+	Definitions map[string]DefinitionFile // from defs/<slug>.yaml (keyed by slug)
 	// CardRefs lists slugs referenced from `> [!card] slug` callouts.
 	CardRefs []string
 	// ChallengeRefs lists slugs referenced from `> [!challenge] slug`.

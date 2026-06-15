@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -42,6 +43,7 @@ func Lint(root string) ([]LintError, error) {
 	errs = append(errs, validateReferences(c)...)
 	errs = append(errs, validateQuestions(c)...)
 	errs = append(errs, validateChallenges(c)...)
+	errs = append(errs, validateDefinitions(c)...)
 
 	sort.Slice(errs, func(i, j int) bool {
 		if errs[i].File != errs[j].File {
@@ -131,6 +133,9 @@ func validateUniqueIDs(c *coursefmt.CourseRef) []LintError {
 			}
 			for chSlug, ch := range l.Challenges {
 				track(ch.ID, l.Path+":challenges/"+chSlug)
+			}
+			for slug, df := range l.Definitions {
+				track(df.ID, l.Path+":defs/"+slug)
 			}
 		}
 	}
@@ -633,4 +638,96 @@ func isValidSlug(s string) bool {
 		}
 	}
 	return true
+}
+
+func validateDefinitions(c *coursefmt.CourseRef) []LintError {
+	var errs []LintError
+
+	// Track aliases globally to detect duplicates across the entire course.
+	aliasOwner := map[string]string{} // lowercased alias → "block/lesson:defs/slug"
+
+	for _, b := range c.Blocks {
+		for _, l := range b.Lessons {
+			for slug, df := range l.Definitions {
+				file := l.Path + ":defs/" + slug
+
+				// Slug format
+				if !isValidSlug(slug) {
+					errs = append(errs, LintError{
+						File: file, Code: "invalid_slug",
+						Message: fmt.Sprintf("definition file name %q must match [a-z0-9-]+", slug),
+					})
+				}
+
+				// ID
+				if df.ID == "" {
+					errs = append(errs, LintError{
+						File: file, Code: "missing_id",
+						Message: fmt.Sprintf("definition %q has empty id (run fix-ids)", slug),
+					})
+				} else if !isUUID(df.ID) {
+					errs = append(errs, LintError{
+						File: file, Code: "invalid_id",
+						Message: fmt.Sprintf("definition id %q is not a valid UUID", df.ID),
+					})
+				}
+
+				// Term
+				if df.Term.Resolve("", "") == "" {
+					errs = append(errs, LintError{
+						File: file, Code: "missing_term",
+						Message: fmt.Sprintf("definition %q has empty term", slug),
+					})
+				}
+
+				// Aliases
+				if len(df.Aliases) == 0 {
+					errs = append(errs, LintError{
+						File: file, Code: "missing_aliases",
+						Message: fmt.Sprintf("definition %q has no aliases (need at least 1)", slug),
+					})
+				}
+
+				// Definition text
+				if df.Definition.Resolve("", "") == "" {
+					errs = append(errs, LintError{
+						File: file, Code: "missing_definition",
+						Message: fmt.Sprintf("definition %q has empty definition text", slug),
+					})
+				}
+
+				// Check alias uniqueness across course
+				for _, alias := range df.Aliases {
+					key := strings.ToLower(strings.TrimSpace(alias))
+					if key == "" {
+						errs = append(errs, LintError{
+							File: file, Code: "empty_alias",
+							Message: fmt.Sprintf("definition %q has an empty alias", slug),
+						})
+						continue
+					}
+					owner := file
+					if prev, exists := aliasOwner[key]; exists && prev != owner {
+						errs = append(errs, LintError{
+							File: file, Code: "duplicate_alias",
+							Message: fmt.Sprintf("alias %q in definition %q is already used by %s", alias, slug, prev),
+						})
+					} else {
+						aliasOwner[key] = owner
+					}
+				}
+
+				// Validate related slugs format
+				for _, rel := range df.Related {
+					if !isValidSlug(rel) {
+						errs = append(errs, LintError{
+							File: file, Code: "invalid_related_slug",
+							Message: fmt.Sprintf("definition %q: related slug %q must match [a-z0-9-]+", slug, rel),
+						})
+					}
+				}
+			}
+		}
+	}
+	return errs
 }

@@ -106,6 +106,7 @@ func loadLesson(fsys fs.FS, blockSlug, lessonSlug string) (*LessonRef, error) {
 		CardFiles:     map[string]CardFile{},
 		QuestionFiles: map[string]CardFile{},
 		Challenges:    map[string]Challenge{},
+		Definitions:   map[string]DefinitionFile{},
 	}
 
 	lref.CardRefs = extractCalloutRefs(body, "card")
@@ -166,6 +167,36 @@ func loadLesson(fsys fs.FS, blockSlug, lessonSlug string) (*LessonRef, error) {
 			return nil, fmt.Errorf("parse %s: %w", cfPath, err)
 		}
 		lref.CardFiles[slug] = cf
+	}
+
+	// defs/ directory (one YAML file per glossary definition)
+	dDir := path.Join(dir, "defs")
+	dEntries, dErr := fs.ReadDir(fsys, dDir)
+	if dErr != nil && !errIsNotExist(dErr) {
+		return nil, fmt.Errorf("read defs/: %w", dErr)
+	}
+	if len(dEntries) > 0 {
+		lref.Definitions = map[string]DefinitionFile{}
+	}
+	for _, de := range dEntries {
+		name := de.Name()
+		if de.IsDir() {
+			continue
+		}
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			continue
+		}
+		slug := strings.TrimSuffix(strings.TrimSuffix(name, ".yaml"), ".yml")
+		dfPath := path.Join(dDir, name)
+		dfData, readErr := fs.ReadFile(fsys, dfPath)
+		if readErr != nil {
+			return nil, fmt.Errorf("read %s: %w", dfPath, readErr)
+		}
+		var df DefinitionFile
+		if err := yaml.Unmarshal(dfData, &df); err != nil {
+			return nil, fmt.Errorf("parse %s: %w", dfPath, err)
+		}
+		lref.Definitions[slug] = df
 	}
 
 	// Backward compat: load questions.yaml (old flat format).

@@ -67,6 +67,12 @@ func discoverContentFiles(root string) ([]string, error) {
 		case "lesson.md":
 			out = append(out, path)
 		}
+
+		// Also pick up definition files in defs/ directories.
+		dir := filepath.Dir(path)
+		if filepath.Base(dir) == "defs" && (strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml")) {
+			out = append(out, path)
+		}
 		return nil
 	})
 	if err != nil {
@@ -94,10 +100,20 @@ func shouldSkipDir(name string) bool {
 // Returns true if the file was modified.
 func fixOne(path string) (bool, error) {
 	name := filepath.Base(path)
+	dir := filepath.Base(filepath.Dir(path))
 
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return false, err
+	}
+
+	// Definition files in defs/ directory — treat like any top-level id file.
+	if dir == "defs" && (strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml")) {
+		out, changed, _ := course.SetTopLevelIDIfMissing(data)
+		if !changed {
+			return false, nil
+		}
+		return true, writeFile(path, out)
 	}
 
 	switch name {
