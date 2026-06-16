@@ -107,10 +107,12 @@ func loadLesson(fsys fs.FS, blockSlug, lessonSlug string) (*LessonRef, error) {
 		QuestionFiles: map[string]CardFile{},
 		Challenges:    map[string]Challenge{},
 		Definitions:   map[string]DefinitionFile{},
+		Sandboxes:     map[string]SandboxFile{},
 	}
 
 	lref.CardRefs = extractCalloutRefs(body, "card")
 	lref.ChallengeRefs = extractCalloutRefs(body, "challenge")
+	lref.SandboxRefs = extractCalloutRefs(body, "sandbox")
 
 	// cards/ directory (one file per card with questions)
 	// Supports both flat YAML files and subfolders with card.yaml + code files.
@@ -264,6 +266,50 @@ func loadLesson(fsys fs.FS, blockSlug, lessonSlug string) (*LessonRef, error) {
 		lref.QuestionFiles[slug] = qf
 	}
 
+	// Optional sandboxes/<slug>/sandbox.yaml folders
+	sbRoot := path.Join(dir, "sandboxes")
+	sbEntries, sbErr := fs.ReadDir(fsys, sbRoot)
+	if sbErr != nil && !errIsNotExist(sbErr) {
+		return nil, fmt.Errorf("read sandboxes/: %w", sbErr)
+	}
+	for _, e := range sbEntries {
+		if !e.IsDir() {
+			continue
+		}
+		sbSlug := e.Name()
+		sbPath := path.Join(sbRoot, sbSlug, "sandbox.yaml")
+		sbData, readErr := fs.ReadFile(fsys, sbPath)
+		if readErr != nil {
+			if errIsNotExist(readErr) {
+				continue
+			}
+			return nil, fmt.Errorf("read %s: %w", sbPath, readErr)
+		}
+		var sb SandboxFile
+		if err := yaml.Unmarshal(sbData, &sb); err != nil {
+			return nil, fmt.Errorf("parse %s: %w", sbPath, err)
+		}
+		// Auto-discover files if not explicitly listed in sandbox.yaml.
+		if len(sb.Files) == 0 {
+			sb.Files = discoverSandboxFiles(fsys, path.Join(sbRoot, sbSlug))
+		} else {
+			// Load content from disk for entries without inline content.
+			for i := range sb.Files {
+				if sb.Files[i].Content == "" {
+					filePath := path.Join(sbRoot, sbSlug, sb.Files[i].Path)
+					fileData, fileErr := fs.ReadFile(fsys, filePath)
+					if fileErr != nil && !errIsNotExist(fileErr) {
+						return nil, fmt.Errorf("read sandbox file %s: %w", filePath, fileErr)
+					}
+					if fileErr == nil {
+						sb.Files[i].Content = string(fileData)
+					}
+				}
+			}
+		}
+		lref.Sandboxes[sbSlug] = sb
+	}
+
 	// Optional challenges/<slug>/challenge.yaml folders
 	chRoot := path.Join(dir, "challenges")
 	entries, err := fs.ReadDir(fsys, chRoot)
@@ -348,4 +394,36 @@ func stripFencedCodeBlocks(body []byte) []byte {
 // All fs.FS implementations should wrap fs.ErrNotExist for this case.
 func errIsNotExist(err error) bool {
 	return errors.Is(err, fs.ErrNotExist)
+}
+
+// discoverSandboxFiles walks a sandbox directory and returns all non-YAML
+// files as SandboxFileEntry values with content loaded from disk.
+// sandbox.yaml itself is excluded.
+func discoverSandboxFiles(fsys fs.FS, dir string) []SandboxFileEntry {
+	var entries []SandboxFileEntry
+	_ = fs.WalkDir(fsys, dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		// Skip the manifest itself.
+		name := path.Base(p)
+		if name == "sandbox.yaml" || name == "sandbox.yml" {
+			return nil
+		}
+		// Compute relative path from sandbox dir.
+		rel := strings.TrimPrefix(p, dir+"/")
+		if rel == p {
+			rel = strings.TrimPrefix(p, dir)
+		}
+		data, readErr := fs.ReadFile(fsys, p)
+		if readErr != nil {
+			return nil
+		}
+		entries = append(entries, SandboxFileEntry{
+			Path:    rel,
+			Content: string(data),
+		})
+		return nil
+	})
+	return entries
 }

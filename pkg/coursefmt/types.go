@@ -115,6 +115,49 @@ type Challenge struct {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// sandboxes/ directory format (one folder per embedded playground)
+// ─────────────────────────────────────────────────────────────────────
+
+// SandboxFile is the manifest parsed from sandboxes/<slug>/sandbox.yaml.
+// It configures an embedded Playground component within a lesson.
+//
+// Minimal (inline callout, no sandbox.yaml needed):
+//
+//	> [!sandbox] go
+//
+// Full (folder with config + files):
+//
+//	> [!sandbox] my-sandbox
+//
+//	sandboxes/my-sandbox/
+//	  sandbox.yaml
+//	  main.go
+//	  utils/helper.go
+type SandboxFile struct {
+	ID             string             `yaml:"id"`
+	Language       string             `yaml:"language"`                  // required: go, php, python, js
+	Version        string             `yaml:"version,omitempty"`         // pin to specific version (e.g. "1.23")
+	VersionLocked  bool               `yaml:"version_locked,omitempty"`  // hide version selector
+	Layout         string             `yaml:"layout,omitempty"`          // single | flat | tree (default: auto by file count)
+	Actions        []string           `yaml:"actions,omitempty"`         // [run] | [test] | [run, test] (default: [run])
+	Mode           string             `yaml:"mode,omitempty"`            // default action: run | test
+	FilesReadonly  bool               `yaml:"files_readonly,omitempty"`  // all files read-only (demo/example mode)
+	AllowAddFiles  *bool              `yaml:"allow_add_files,omitempty"` // can student create/delete files? (default: true)
+	OutputPosition string             `yaml:"output_position,omitempty"` // side | bottom (default: side)
+	Files          []SandboxFileEntry `yaml:"files,omitempty"`           // explicit file list (overrides auto-discovery)
+}
+
+// SandboxFileEntry describes one file within a sandbox. If only `path` is
+// specified, content is loaded from the file on disk at that path relative
+// to the sandbox folder. If `content` is specified inline, it takes precedence.
+type SandboxFileEntry struct {
+	Path     string `yaml:"path"`               // relative path (e.g. "main.go", "utils/helper.go")
+	Readonly bool   `yaml:"readonly,omitempty"` // mark file as non-editable
+	Hidden   bool   `yaml:"hidden,omitempty"`   // include in execution but hide from UI
+	Content  string `yaml:"content,omitempty"`  // inline content (optional; overrides file on disk)
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // cards/ directory format (one file per card with questions)
 // ─────────────────────────────────────────────────────────────────────
 
@@ -384,6 +427,9 @@ type LessonRef struct {
 	CardFiles   map[string]CardFile       // from cards/<slug>.yaml (keyed by slug)
 	Challenges  map[string]Challenge      // by challenge slug
 	Definitions map[string]DefinitionFile // from defs/<slug>.yaml (keyed by slug)
+	Sandboxes   map[string]SandboxFile    // from sandboxes/<slug>/sandbox.yaml (keyed by slug)
+	// SandboxRefs lists slugs referenced from `> [!sandbox] slug` callouts.
+	SandboxRefs []string
 	// CardRefs lists slugs referenced from `> [!card] slug` callouts.
 	CardRefs []string
 	// ChallengeRefs lists slugs referenced from `> [!challenge] slug`.
