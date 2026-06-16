@@ -105,8 +105,9 @@ type Challenge struct {
 	ID          string            `yaml:"id"`
 	Title       string            `yaml:"title"`
 	Description string            `yaml:"description"`
-	Language    string            `yaml:"language,omitempty"` // code language: go, python, …
-	Type        string            `yaml:"type,omitempty"`     // coding (default) | git_interactive
+	Language    string            `yaml:"language,omitempty"`  // code language: go, python, …
+	Type        string            `yaml:"type,omitempty"`      // coding (default) | git_interactive | sql | sandbox
+	TestMode    string            `yaml:"test_mode,omitempty"` // run | test | test_race | vet | lint | bench
 	TimeoutSec  int               `yaml:"timeout_sec,omitempty"`
 	Limits      map[string]any    `yaml:"limits,omitempty"`
 	Files       map[string]string `yaml:"files,omitempty"`

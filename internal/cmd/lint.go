@@ -425,15 +425,45 @@ func validateChallenges(c *coursefmt.CourseRef) []LintError {
 							Message: "challenge.yaml: coding challenge needs `language`",
 						})
 					}
-					required := []string{"template", "tests", "solution"}
+					// Challenges with test_mode (vet/lint/bench) don't need tests/solution files.
+					if ch.TestMode == "vet" || ch.TestMode == "lint" || ch.TestMode == "bench" {
+						// Only template required for analysis-only modes.
+						if ch.Files["template"] == "" {
+							errs = append(errs, LintError{
+								File: file, Code: "missing_file",
+								Message: "challenge.yaml: files.template is required for coding challenges",
+							})
+						}
+					} else {
+						required := []string{"template", "tests", "solution"}
+						for _, key := range required {
+							if ch.Files[key] == "" {
+								errs = append(errs, LintError{
+									File: file, Code: "missing_file",
+									Message: fmt.Sprintf("challenge.yaml: files.%s is required for coding challenges", key),
+								})
+							}
+						}
+					}
+				case "sql":
+					if ch.Language == "" {
+						errs = append(errs, LintError{
+							File: file, Code: "missing_language",
+							Message: "challenge.yaml: sql challenge needs `language: sql`",
+						})
+					}
+					// SQL challenges need setup + template + solution (comparison-based).
+					required := []string{"setup", "template", "solution"}
 					for _, key := range required {
 						if ch.Files[key] == "" {
 							errs = append(errs, LintError{
 								File: file, Code: "missing_file",
-								Message: fmt.Sprintf("challenge.yaml: files.%s is required for coding challenges", key),
+								Message: fmt.Sprintf("challenge.yaml: files.%s is required for sql challenges", key),
 							})
 						}
 					}
+				case "sandbox":
+					// Sandboxes are validated separately (sandbox.yaml, not challenge.yaml).
 				case "git_interactive":
 					required := []string{"setup", "check"}
 					for _, key := range required {
