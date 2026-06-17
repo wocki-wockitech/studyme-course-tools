@@ -113,6 +113,7 @@ type Challenge struct {
 	Files       map[string]string `yaml:"files,omitempty"`
 	Hints       []string          `yaml:"hints,omitempty"`
 	Comparison  map[string]any    `yaml:"comparison,omitempty"`
+	ShowTests   bool              `yaml:"show_tests,omitempty"` // if true, test files are visible to student (default: hidden)
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -137,8 +138,7 @@ type Challenge struct {
 type SandboxFile struct {
 	ID             string             `yaml:"id"`
 	Language       string             `yaml:"language"`                  // required: go, php, python, js
-	Version        string             `yaml:"version,omitempty"`         // pin to specific version (e.g. "1.23")
-	VersionLocked  bool               `yaml:"version_locked,omitempty"`  // hide version selector
+	Version        VersionSpec        `yaml:"version,omitempty"`         // string = locked; []string = choice (first is default); absent = all from runme
 	Layout         string             `yaml:"layout,omitempty"`          // single | flat | tree (default: auto by file count)
 	Actions        []string           `yaml:"actions,omitempty"`         // [run] | [test] | [run, test] (default: [run])
 	Mode           string             `yaml:"mode,omitempty"`            // default action: run | test
@@ -146,6 +146,7 @@ type SandboxFile struct {
 	AllowAddFiles  *bool              `yaml:"allow_add_files,omitempty"` // can student create/delete files? (default: true)
 	OutputPosition string             `yaml:"output_position,omitempty"` // side | bottom (default: side)
 	Files          []SandboxFileEntry `yaml:"files,omitempty"`           // explicit file list (overrides auto-discovery)
+	ShowTests      bool               `yaml:"show_tests,omitempty"`      // if true, test files are visible to student (default: hidden)
 }
 
 // SandboxFileEntry describes one file within a sandbox. If only `path` is
@@ -156,6 +157,50 @@ type SandboxFileEntry struct {
 	Readonly bool   `yaml:"readonly,omitempty"` // mark file as non-editable
 	Hidden   bool   `yaml:"hidden,omitempty"`   // include in execution but hide from UI
 	Content  string `yaml:"content,omitempty"`  // inline content (optional; overrides file on disk)
+}
+
+// VersionSpec supports two YAML forms:
+//   - scalar string: version: "1.22"       → locked to single version
+//   - list:          version: ["1.21","1.26"] → student picks from list (first = default)
+//
+// When absent/empty → all versions from runme are available.
+type VersionSpec struct {
+	Versions []string // one element = locked; multiple = selectable subset
+}
+
+// IsLocked returns true if exactly one version is specified (no choice for student).
+func (vs VersionSpec) IsLocked() bool {
+	return len(vs.Versions) == 1
+}
+
+// Default returns the first version in the list, or empty string.
+func (vs VersionSpec) Default() string {
+	if len(vs.Versions) == 0 {
+		return ""
+	}
+	return vs.Versions[0]
+}
+
+// IsEmpty returns true if no version constraint was specified.
+func (vs VersionSpec) IsEmpty() bool {
+	return len(vs.Versions) == 0
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler for VersionSpec.
+func (vs *VersionSpec) UnmarshalYAML(unmarshal func(any) error) error {
+	// Try string first.
+	var s string
+	if err := unmarshal(&s); err == nil && s != "" {
+		vs.Versions = []string{s}
+		return nil
+	}
+	// Try []string.
+	var arr []string
+	if err := unmarshal(&arr); err == nil {
+		vs.Versions = arr
+		return nil
+	}
+	return fmt.Errorf("VersionSpec: expected string or []string")
 }
 
 // ─────────────────────────────────────────────────────────────────────
